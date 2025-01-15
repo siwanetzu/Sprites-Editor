@@ -1,5 +1,0 @@
-/Users/dominikgolab/Documents/GitHub/Sprites Editor/build/CMakeFiles/SpriteEditor.dir
-/Users/dominikgolab/Documents/GitHub/Sprites Editor/build/CMakeFiles/edit_cache.dir
-/Users/dominikgolab/Documents/GitHub/Sprites Editor/build/CMakeFiles/rebuild_cache.dir
-/Users/dominikgolab/Documents/GitHub/Sprites Editor/build/CMakeFiles/SpriteEditor_autogen_timestamp_deps.dir
-/Users/dominikgolab/Documents/GitHub/Sprites Editor/build/CMakeFiles/SpriteEditor_autogen.dir
