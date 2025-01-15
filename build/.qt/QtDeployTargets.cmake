@@ -1,0 +1,2 @@
+set(__QT_DEPLOY_TARGET_SpriteEditor_FILE /Users/dominikgolab/Documents/GitHub/Sprites Editor/build/SpriteEditor)
+set(__QT_DEPLOY_TARGET_SpriteEditor_TYPE EXECUTABLE)
