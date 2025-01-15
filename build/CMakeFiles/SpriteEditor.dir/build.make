@@ -73,7 +73,7 @@ SpriteEditor_autogen/timestamp: /opt/homebrew/opt/qt@6/share/qt/libexec/moc
 SpriteEditor_autogen/timestamp: /opt/homebrew/opt/qt@6/share/qt/libexec/uic
 SpriteEditor_autogen/timestamp: CMakeFiles/SpriteEditor.dir/compiler_depend.ts
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --blue --bold --progress-dir="/Users/dominikgolab/Documents/GitHub/Sprites Editor/build/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_1) "Automatic MOC and UIC for target SpriteEditor"
-	/opt/homebrew/bin/cmake -E cmake_autogen "/Users/dominikgolab/Documents/GitHub/Sprites Editor/build/CMakeFiles/SpriteEditor_autogen.dir/AutogenInfo.json" ""
+	/opt/homebrew/bin/cmake -E cmake_autogen "/Users/dominikgolab/Documents/GitHub/Sprites Editor/build/CMakeFiles/SpriteEditor_autogen.dir/AutogenInfo.json" Debug
 	/opt/homebrew/bin/cmake -E touch "/Users/dominikgolab/Documents/GitHub/Sprites Editor/build/SpriteEditor_autogen/timestamp"
 
 CMakeFiles/SpriteEditor.dir/codegen:

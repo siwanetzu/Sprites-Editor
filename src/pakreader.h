@@ -26,7 +26,9 @@ public:
     std::vector<std::shared_ptr<SpriteEntry>> entries() const;
 
 private:
-    bool tryFormat1(const QByteArray& data);  // Standard PAK format
-    bool tryFormat2(const QByteArray& data);  // Alternative format
+    bool tryFormat1(const QByteArray& data);  // PNG/BMP sequence format
+    bool tryFormat2(const QByteArray& data);  // Size + data chunks format
+    bool tryFormat3(const QByteArray& data);  // Scan for image signatures
+    int findPNGEnd(const QByteArray& data, int start);
     std::vector<std::shared_ptr<SpriteEntry>> m_entries;
 }; 
