@@ -125,12 +125,38 @@ void MainWindow::loadPakFile()
     if (fileName.isEmpty())
         return;
         
-    statusBar->showMessage("Loading PAK file...");
-    QApplication::processEvents(); // Allow UI to update
-        
+    statusBar->showMessage("Loading PAK file: " + fileName);
+    QApplication::processEvents();
+    
+    // Create a debug text widget if it doesn't exist
+    if (!debugLabel) {
+        debugLabel = new QLabel(this);
+        debugLabel->setWordWrap(true);
+        debugLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        rightPanel->layout()->addWidget(debugLabel);
+    }
+    
+    QString debugText;
+    QFile file(fileName);
+    debugText += "Attempting to open: " + fileName + "\n";
+    
+    if (!file.open(QIODevice::ReadOnly)) {
+        debugText += "Failed to open file: " + file.errorString() + "\n";
+        debugLabel->setText(debugText);
+        QMessageBox::critical(this, "Error", "Failed to open PAK file:\n" + file.errorString());
+        return;
+    }
+    
+    // Read first few bytes to show format
+    QByteArray header = file.read(16);
+    debugText += "File size: " + QString::number(file.size()) + " bytes\n";
+    debugText += "Header bytes: " + header.toHex() + "\n";
+    debugLabel->setText(debugText);
+    
     if (!currentPak.readFile(fileName)) {
-        QMessageBox::critical(this, "Error", "Failed to open PAK file. Check debug output for details.");
-        statusBar->showMessage("Failed to load PAK file");
+        debugText += "Failed to parse PAK file format\n";
+        debugLabel->setText(debugText);
+        QMessageBox::critical(this, "Error", "Failed to parse PAK file. See debug output for details.");
         return;
     }
     
@@ -144,10 +170,6 @@ void MainWindow::loadPakFile()
     // Add all sprites as children
     int validSprites = 0;
     for (const auto& entry : currentPak.entries()) {
-        if (entry->image.isNull()) {
-            qDebug() << "Skipping invalid sprite:" << entry->name;
-            continue;
-        }
         auto item = new QTreeWidgetItem(rootItem);
         item->setText(0, entry->name);
         item->setData(0, Qt::UserRole, QVariant::fromValue(entry));
@@ -155,7 +177,9 @@ void MainWindow::loadPakFile()
     }
     
     rootItem->setExpanded(true);
-    statusBar->showMessage(QString("Loaded %1 valid sprites").arg(validSprites));
+    debugText += "Loaded " + QString::number(validSprites) + " sprites\n";
+    debugLabel->setText(debugText);
+    statusBar->showMessage(QString("Loaded %1 sprites").arg(validSprites));
 }
 
 void MainWindow::displaySprite(const QModelIndex& index)

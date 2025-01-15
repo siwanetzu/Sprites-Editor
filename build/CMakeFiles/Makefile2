@@ -84,8 +84,8 @@ clean: CMakeFiles/SpriteEditor_autogen.dir/clean
 # Target rules for target CMakeFiles/SpriteEditor.dir
 
 # All Build rule for target.
-CMakeFiles/SpriteEditor.dir/all: CMakeFiles/SpriteEditor_autogen.dir/all
 CMakeFiles/SpriteEditor.dir/all: CMakeFiles/SpriteEditor_autogen_timestamp_deps.dir/all
+CMakeFiles/SpriteEditor.dir/all: CMakeFiles/SpriteEditor_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SpriteEditor.dir/build.make CMakeFiles/SpriteEditor.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/SpriteEditor.dir/build.make CMakeFiles/SpriteEditor.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/dominikgolab/Documents/GitHub/Sprites Editor/build/CMakeFiles" --progress-num=1,2,3,4,5,6,7 "Built target SpriteEditor"

@@ -47,4 +47,5 @@ private:
     PakReader currentPak;
     QString currentFile;
     std::shared_ptr<SpriteEntry> currentSprite;
+    QLabel* debugLabel = nullptr;
 }; 
