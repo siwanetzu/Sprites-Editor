@@ -6,12 +6,6 @@
 #include <vector>
 #include <memory>
 
-// Forward declare SpriteEntry
-struct SpriteEntry;
-
-// Declare metatype before the struct definition
-Q_DECLARE_METATYPE(std::shared_ptr<SpriteEntry>);
-
 struct SpriteEntry {
     QString name;
     QByteArray data;
@@ -22,6 +16,8 @@ struct SpriteEntry {
     QImage preview() const { return image; }
 };
 
+Q_DECLARE_METATYPE(std::shared_ptr<SpriteEntry>)
+
 class PakReader {
 public:
     explicit PakReader();
@@ -30,5 +26,7 @@ public:
     std::vector<std::shared_ptr<SpriteEntry>> entries() const;
 
 private:
+    bool tryFormat1(const QByteArray& data);  // Standard PAK format
+    bool tryFormat2(const QByteArray& data);  // Alternative format
     std::vector<std::shared_ptr<SpriteEntry>> m_entries;
 }; 

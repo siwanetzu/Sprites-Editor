@@ -16,116 +16,110 @@ bool PakReader::readFile(const QString& path) {
     QDataStream stream(&file);
     stream.setByteOrder(QDataStream::LittleEndian);
 
-    // Debug file size
-    qDebug() << "File size:" << file.size() << "bytes";
-
     try {
-        // Read and verify header
-        QByteArray header = file.read(4);
-        qDebug() << "Header:" << header;
+        // Read the entire file content
+        QByteArray fileData = file.readAll();
+        qDebug() << "File size:" << fileData.size() << "bytes";
 
-        // If not a standard PAK file, try alternative format
-        if (header != "PACK") {
-            qDebug() << "Not a standard PAK file, trying alternative format";
-            file.seek(0);
-        }
-
-        // Read file size and number of entries with bounds checking
-        if (file.bytesAvailable() < 8) {
-            qDebug() << "File too small for header";
+        // Try different PAK formats
+        if (!tryFormat1(fileData) && !tryFormat2(fileData)) {
+            qDebug() << "Failed to parse PAK file in any known format";
             return false;
         }
 
-        quint32 fileSize, numEntries;
-        stream >> fileSize >> numEntries;
-
-        // Sanity check
-        if (numEntries > 10000) { // Arbitrary reasonable limit
-            qDebug() << "Too many entries:" << numEntries;
-            return false;
-        }
-
-        qDebug() << "File size from header:" << fileSize;
-        qDebug() << "Number of entries:" << numEntries;
-
-        m_entries.clear();
-        m_entries.reserve(numEntries);
-
-        // Read entries
-        for (quint32 i = 0; i < numEntries; ++i) {
-            if (file.bytesAvailable() < 9) { // Minimum bytes needed for an entry
-                qDebug() << "Unexpected end of file at entry" << i;
-                return false;
-            }
-
-            quint32 offset, size;
-            quint8 nameLength;
-            stream >> offset >> size >> nameLength;
-
-            // Sanity checks
-            if (nameLength > 100) { // Arbitrary reasonable limit
-                qDebug() << "Name length too large:" << nameLength;
-                return false;
-            }
-
-            if (file.bytesAvailable() < nameLength) {
-                qDebug() << "Unexpected end of file reading name";
-                return false;
-            }
-
-            QByteArray nameData = file.read(nameLength);
-            QString name = QString::fromUtf8(nameData);
-
-            // More sanity checks
-            if (offset + size > file.size()) {
-                qDebug() << "Entry" << name << "extends beyond file size";
-                return false;
-            }
-
-            qDebug() << "Reading entry:" << name << "offset:" << offset << "size:" << size;
-
-            auto entry = std::make_shared<SpriteEntry>();
-            entry->name = name;
-
-            // Store current position
-            qint64 currentPos = file.pos();
-            
-            // Read sprite data
-            file.seek(offset);
-            entry->data = file.read(size);
-            
-            if (entry->data.size() != size) {
-                qDebug() << "Failed to read complete data for" << name;
-                return false;
-            }
-
-            // Try to load as image
-            if (entry->loadImage()) {
-                qDebug() << "Successfully loaded image for" << name;
-            } else {
-                qDebug() << "Failed to load image for" << name;
-            }
-            
-            // Restore position for next entry
-            file.seek(currentPos);
-            
-            m_entries.push_back(entry);
-        }
-
-        qDebug() << "Successfully loaded" << m_entries.size() << "entries";
         return true;
 
     } catch (const std::exception& e) {
         qDebug() << "Exception while reading PAK file:" << e.what();
         return false;
-    } catch (...) {
-        qDebug() << "Unknown exception while reading PAK file";
-        return false;
     }
 }
 
-std::vector<std::shared_ptr<SpriteEntry>> PakReader::entries() const {
-    return m_entries;
+bool PakReader::tryFormat1(const QByteArray& data) {
+    QBuffer buffer;
+    buffer.setData(data);
+    buffer.open(QBuffer::ReadOnly);
+    QDataStream stream(&buffer);
+    stream.setByteOrder(QDataStream::LittleEndian);
+
+    // Try reading as format 1 (standard PAK)
+    char header[4];
+    stream.readRawData(header, 4);
+    
+    if (memcmp(header, "PACK", 4) != 0) {
+        return false;
+    }
+
+    quint32 fileSize, numEntries;
+    stream >> fileSize >> numEntries;
+
+    if (numEntries > 10000) { // Sanity check
+        return false;
+    }
+
+    m_entries.clear();
+    for (quint32 i = 0; i < numEntries; ++i) {
+        quint32 offset, size;
+        quint8 nameLength;
+        stream >> offset >> size >> nameLength;
+
+        if (nameLength > 100) continue; // Skip invalid entries
+
+        QByteArray nameData = buffer.read(nameLength);
+        QString name = QString::fromUtf8(nameData);
+
+        auto entry = std::make_shared<SpriteEntry>();
+        entry->name = name;
+
+        // Read sprite data
+        qint64 currentPos = buffer.pos();
+        buffer.seek(offset);
+        entry->data = buffer.read(size);
+        buffer.seek(currentPos);
+
+        if (entry->loadImage()) {
+            m_entries.push_back(entry);
+            qDebug() << "Loaded sprite:" << name;
+        }
+    }
+
+    return !m_entries.empty();
+}
+
+bool PakReader::tryFormat2(const QByteArray& data) {
+    QBuffer buffer;
+    buffer.setData(data);
+    buffer.open(QBuffer::ReadOnly);
+    QDataStream stream(&buffer);
+    stream.setByteOrder(QDataStream::LittleEndian);
+
+    // Try reading as format 2 (alternative format)
+    quint32 numEntries;
+    stream >> numEntries;
+
+    if (numEntries > 10000) return false;
+
+    m_entries.clear();
+    qint64 currentOffset = 4; // Start after numEntries
+
+    for (quint32 i = 0; i < numEntries; ++i) {
+        quint32 size;
+        stream >> size;
+        
+        if (size > buffer.size() - currentOffset) break;
+
+        auto entry = std::make_shared<SpriteEntry>();
+        entry->name = QString("sprite_%1").arg(i);
+        entry->data = buffer.read(size);
+        currentOffset += 4 + size;
+
+        if (entry->loadImage()) {
+            m_entries.push_back(entry);
+            qDebug() << "Loaded sprite:" << entry->name;
+        }
+    }
+
+    return !m_entries.empty();
 }
 
 bool SpriteEntry::loadImage() {
@@ -134,24 +128,35 @@ bool SpriteEntry::loadImage() {
         buffer.open(QBuffer::ReadOnly);
         
         // Try different image formats
-        if (image.load(&buffer, "PNG")) {
-            return true;
-        }
-        buffer.seek(0);
-        if (image.load(&buffer, "BMP")) {
-            return true;
-        }
-        buffer.seek(0);
-        if (image.load(&buffer, "JPG")) {
-            return true;
-        }
+        if (image.load(&buffer, "PNG")) return true;
         
-        // Add more formats if needed
+        buffer.seek(0);
+        if (image.load(&buffer, "BMP")) return true;
+        
+        buffer.seek(0);
+        if (image.load(&buffer, "JPG")) return true;
+        
+        buffer.seek(0);
+        if (image.load(&buffer, "GIF")) return true;
+
+        // Try raw image data
+        buffer.seek(0);
+        QImage img(reinterpret_cast<const uchar*>(data.constData()), 
+                  32, 32, QImage::Format_ARGB32);  // Try common sprite size
+        if (!img.isNull()) {
+            image = img;
+            return true;
+        }
+
         return false;
     } catch (...) {
         qDebug() << "Exception while loading image";
         return false;
     }
+}
+
+std::vector<std::shared_ptr<SpriteEntry>> PakReader::entries() const {
+    return m_entries;
 }
 
 bool SpriteEntry::exportTo(const QString& path, const QString& format) const {
