@@ -16,63 +16,49 @@ bool PakReader::readFile(const QString& filename) {
     // Clear existing entries
     m_entries.clear();
 
-    // Read file header
-    QDataStream stream(&file);
-    stream.setByteOrder(QDataStream::LittleEndian);  // Game files typically use little endian
-
-    // Read magic number "<Pak"
-    char magic[4];
-    stream.readRawData(magic, 4);
-    if (memcmp(magic, "<Pak", 4) != 0) {
-        qDebug() << "Invalid magic number";
+    // Read and verify header (16 bytes total)
+    QByteArray headerData = file.read(16);
+    qDebug() << "Full header:" << headerData.toHex();
+    
+    // Skip the header text "<Pak file here>" (16 bytes)
+    if (!headerData.startsWith("<Pak file here>")) {
+        qDebug() << "Invalid header format";
         return false;
     }
 
-    // Read file version and flags
-    quint16 version;
-    quint16 flags;
-    stream >> version >> flags;
-    qDebug() << "Version:" << version << "Flags:" << flags;
-
-    // Read number of entries
+    // Read the number of entries (4 bytes)
     quint32 numEntries;
+    QDataStream stream(&file);
+    stream.setByteOrder(QDataStream::LittleEndian);
     stream >> numEntries;
+    
     qDebug() << "Number of entries:" << numEntries;
 
     // Read file table
-    for (quint32 i = 0; i < numEntries; i++) {
+    for (quint32 i = 0; i < numEntries && !stream.atEnd(); i++) {
         auto entry = std::make_shared<SpriteEntry>();
 
-        // Read entry header
-        quint32 nameLength;
-        stream >> nameLength;
-        
-        if (nameLength > 1024) { // Sanity check
-            qDebug() << "Invalid name length:" << nameLength;
+        // Read name (null-terminated string)
+        QByteArray nameBuf;
+        char c;
+        while (stream.readRawData(&c, 1) == 1 && c != '\0') {
+            nameBuf.append(c);
+        }
+        entry->name = QString::fromUtf8(nameBuf);
+
+        // Read data size (4 bytes)
+        quint32 size;
+        stream >> size;
+
+        // Read the actual sprite data
+        entry->data = file.read(size);
+
+        if (entry->data.size() != size) {
+            qDebug() << "Failed to read complete data for entry" << i;
             return false;
         }
 
-        // Read name
-        QByteArray nameBytes(nameLength, 0);
-        stream.readRawData(nameBytes.data(), nameLength);
-        entry->name = QString::fromUtf8(nameBytes);
-
-        // Read offset and size
-        quint32 offset;
-        quint32 size;
-        stream >> offset >> size;
-
-        // Store current position
-        qint64 currentPos = file.pos();
-
-        // Seek to data position and read
-        file.seek(offset);
-        entry->data = file.read(size);
-
-        // Return to table position
-        file.seek(currentPos);
-
-        qDebug() << "Entry:" << entry->name << "Size:" << size << "Offset:" << offset;
+        qDebug() << "Entry" << i << ":" << entry->name << "Size:" << size;
         m_entries.push_back(entry);
     }
 
