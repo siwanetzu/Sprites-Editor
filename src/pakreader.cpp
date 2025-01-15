@@ -16,60 +16,63 @@ bool PakReader::readFile(const QString& filename) {
     // Clear existing entries
     m_entries.clear();
 
-    // Read and verify header
-    QByteArray header = file.read(4);
-    if (header != "<Pak") {  // 3c50616b in hex is "<Pak"
-        qDebug() << "Invalid PAK header:" << header.toHex();
+    // Read file header
+    QDataStream stream(&file);
+    stream.setByteOrder(QDataStream::LittleEndian);  // Game files typically use little endian
+
+    // Read magic number "<Pak"
+    char magic[4];
+    stream.readRawData(magic, 4);
+    if (memcmp(magic, "<Pak", 4) != 0) {
+        qDebug() << "Invalid magic number";
         return false;
     }
 
-    // Read version (4 bytes)
-    quint32 version;
-    if (file.read(reinterpret_cast<char*>(&version), sizeof(version)) != sizeof(version)) {
-        qDebug() << "Failed to read version";
-        return false;
-    }
+    // Read file version and flags
+    quint16 version;
+    quint16 flags;
+    stream >> version >> flags;
+    qDebug() << "Version:" << version << "Flags:" << flags;
 
-    // Read number of entries (4 bytes)
+    // Read number of entries
     quint32 numEntries;
-    if (file.read(reinterpret_cast<char*>(&numEntries), sizeof(numEntries)) != sizeof(numEntries)) {
-        qDebug() << "Failed to read number of entries";
-        return false;
-    }
+    stream >> numEntries;
+    qDebug() << "Number of entries:" << numEntries;
 
-    // Read each entry
+    // Read file table
     for (quint32 i = 0; i < numEntries; i++) {
         auto entry = std::make_shared<SpriteEntry>();
-        
-        // Read name length (4 bytes)
+
+        // Read entry header
         quint32 nameLength;
-        if (file.read(reinterpret_cast<char*>(&nameLength), sizeof(nameLength)) != sizeof(nameLength)) {
-            qDebug() << "Failed to read name length for entry" << i;
+        stream >> nameLength;
+        
+        if (nameLength > 1024) { // Sanity check
+            qDebug() << "Invalid name length:" << nameLength;
             return false;
         }
-        
+
         // Read name
-        QByteArray nameData = file.read(nameLength);
-        if (nameData.size() != nameLength) {
-            qDebug() << "Failed to read name for entry" << i;
-            return false;
-        }
-        entry->name = QString::fromUtf8(nameData);
-        
-        // Read data size (4 bytes)
-        quint32 dataSize;
-        if (file.read(reinterpret_cast<char*>(&dataSize), sizeof(dataSize)) != sizeof(dataSize)) {
-            qDebug() << "Failed to read data size for entry" << i;
-            return false;
-        }
-        
-        // Read data
-        entry->data = file.read(dataSize);
-        if (entry->data.size() != dataSize) {
-            qDebug() << "Failed to read data for entry" << i;
-            return false;
-        }
-        
+        QByteArray nameBytes(nameLength, 0);
+        stream.readRawData(nameBytes.data(), nameLength);
+        entry->name = QString::fromUtf8(nameBytes);
+
+        // Read offset and size
+        quint32 offset;
+        quint32 size;
+        stream >> offset >> size;
+
+        // Store current position
+        qint64 currentPos = file.pos();
+
+        // Seek to data position and read
+        file.seek(offset);
+        entry->data = file.read(size);
+
+        // Return to table position
+        file.seek(currentPos);
+
+        qDebug() << "Entry:" << entry->name << "Size:" << size << "Offset:" << offset;
         m_entries.push_back(entry);
     }
 
@@ -207,46 +210,45 @@ int PakReader::findPNGEnd(const QByteArray& data, int start) {
 }
 
 bool SpriteEntry::loadImage() {
-    try {
-        QBuffer buffer(&data);
-        buffer.open(QBuffer::ReadOnly);
-        
-        // Try different image formats
-        if (image.load(&buffer, "PNG")) {
-            qDebug() << "Loaded as PNG, size:" << image.size();
-            return true;
-        }
-        
-        buffer.seek(0);
-        if (image.load(&buffer, "BMP")) {
-            qDebug() << "Loaded as BMP, size:" << image.size();
-            return true;
-        }
-        
-        buffer.seek(0);
-        if (image.load(&buffer, "JPG")) {
-            qDebug() << "Loaded as JPG, size:" << image.size();
-            return true;
-        }
-        
-        // Try different raw image formats
-        for (int width = 16; width <= 256; width *= 2) {
-            for (int height = 16; height <= 256; height *= 2) {
-                QImage img(reinterpret_cast<const uchar*>(data.constData()), 
-                         width, height, QImage::Format_ARGB32);
-                if (!img.isNull() && !img.isGrayscale()) {
-                    image = img;
-                    qDebug() << "Loaded as raw" << width << "x" << height;
-                    return true;
-                }
+    QBuffer buffer(&data);
+    buffer.open(QBuffer::ReadOnly);
+
+    // Try to load as standard image formats first
+    if (image.load(&buffer, "PNG") || 
+        image.load(&buffer, "BMP") || 
+        image.load(&buffer, "JPG")) {
+        return true;
+    }
+
+    // If standard formats fail, try to load as raw image data
+    // The game might use a custom format, so we'll try common dimensions
+    buffer.seek(0);
+    
+    // Try to detect image dimensions from the data size
+    int dataSize = data.size();
+    
+    // Common sprite sizes to try (32x32, 64x64, 128x128, etc)
+    const int sizes[] = {32, 64, 128, 256, 512};
+    
+    for (int width : sizes) {
+        for (int height : sizes) {
+            // Try 32-bit RGBA
+            if (dataSize == width * height * 4) {
+                image = QImage((const uchar*)data.constData(), width, height, 
+                             width * 4, QImage::Format_RGBA8888);
+                if (!image.isNull()) return true;
+            }
+            // Try 24-bit RGB
+            if (dataSize == width * height * 3) {
+                image = QImage((const uchar*)data.constData(), width, height, 
+                             width * 3, QImage::Format_RGB888);
+                if (!image.isNull()) return true;
             }
         }
-
-        return false;
-    } catch (...) {
-        qDebug() << "Exception while loading image";
-        return false;
     }
+
+    qDebug() << "Failed to load image data of size" << dataSize;
+    return false;
 }
 
 std::vector<std::shared_ptr<SpriteEntry>> PakReader::entries() const {
