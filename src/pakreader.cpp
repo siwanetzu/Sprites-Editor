@@ -6,34 +6,74 @@
 
 PakReader::PakReader() {}
 
-bool PakReader::readFile(const QString& path) {
-    QFile file(path);
+bool PakReader::readFile(const QString& filename) {
+    QFile file(filename);
     if (!file.open(QIODevice::ReadOnly)) {
-        qDebug() << "Failed to open file:" << path;
+        qDebug() << "Failed to open file:" << file.errorString();
         return false;
     }
 
-    QDataStream stream(&file);
-    stream.setByteOrder(QDataStream::LittleEndian);
+    // Clear existing entries
+    m_entries.clear();
 
-    try {
-        // Read the entire file content
-        QByteArray fileData = file.readAll();
-        qDebug() << "File size:" << fileData.size() << "bytes";
-        qDebug() << "First 16 bytes:" << fileData.left(16).toHex();
+    // Read and verify header
+    QByteArray header = file.read(4);
+    if (header != "<Pak") {  // 3c50616b in hex is "<Pak"
+        qDebug() << "Invalid PAK header:" << header.toHex();
+        return false;
+    }
 
-        // Try different PAK formats
-        if (!tryFormat1(fileData) && !tryFormat2(fileData) && !tryFormat3(fileData)) {
-            qDebug() << "Failed to parse PAK file in any known format";
+    // Read version (4 bytes)
+    quint32 version;
+    if (file.read(reinterpret_cast<char*>(&version), sizeof(version)) != sizeof(version)) {
+        qDebug() << "Failed to read version";
+        return false;
+    }
+
+    // Read number of entries (4 bytes)
+    quint32 numEntries;
+    if (file.read(reinterpret_cast<char*>(&numEntries), sizeof(numEntries)) != sizeof(numEntries)) {
+        qDebug() << "Failed to read number of entries";
+        return false;
+    }
+
+    // Read each entry
+    for (quint32 i = 0; i < numEntries; i++) {
+        auto entry = std::make_shared<SpriteEntry>();
+        
+        // Read name length (4 bytes)
+        quint32 nameLength;
+        if (file.read(reinterpret_cast<char*>(&nameLength), sizeof(nameLength)) != sizeof(nameLength)) {
+            qDebug() << "Failed to read name length for entry" << i;
             return false;
         }
-
-        return true;
-
-    } catch (const std::exception& e) {
-        qDebug() << "Exception while reading PAK file:" << e.what();
-        return false;
+        
+        // Read name
+        QByteArray nameData = file.read(nameLength);
+        if (nameData.size() != nameLength) {
+            qDebug() << "Failed to read name for entry" << i;
+            return false;
+        }
+        entry->name = QString::fromUtf8(nameData);
+        
+        // Read data size (4 bytes)
+        quint32 dataSize;
+        if (file.read(reinterpret_cast<char*>(&dataSize), sizeof(dataSize)) != sizeof(dataSize)) {
+            qDebug() << "Failed to read data size for entry" << i;
+            return false;
+        }
+        
+        // Read data
+        entry->data = file.read(dataSize);
+        if (entry->data.size() != dataSize) {
+            qDebug() << "Failed to read data for entry" << i;
+            return false;
+        }
+        
+        m_entries.push_back(entry);
     }
+
+    return !m_entries.empty();
 }
 
 bool PakReader::tryFormat1(const QByteArray& data) {

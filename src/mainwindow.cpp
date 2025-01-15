@@ -37,7 +37,7 @@ void MainWindow::setupUI()
     splitter->addWidget(spriteTree);
 
     // Right panel
-    auto rightPanel = new QWidget;
+    rightPanel = new QWidget;
     auto rightLayout = new QVBoxLayout(rightPanel);
 
     // Preview area with zoom controls

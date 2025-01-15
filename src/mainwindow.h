@@ -48,4 +48,5 @@ private:
     QString currentFile;
     std::shared_ptr<SpriteEntry> currentSprite;
     QLabel* debugLabel = nullptr;
+    QWidget* rightPanel = nullptr;
 }; 
